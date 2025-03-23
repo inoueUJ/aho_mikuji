@@ -175,9 +175,16 @@ export async function POST(request: Request) {
 		let result: Fortune;
 
 		try {
-			const content = response.content[0].text;
+			// 新しいSDKでのレスポンス構造に合わせて処理
+			let textContent = '';
+			for (const block of response.content) {
+				if (block.type === 'text') {
+					textContent += block.text;
+				}
+			}
+			
 			// JSON部分を抽出（余分なテキストがある場合に備えて）
-			const jsonMatch = content.match(/\{[\s\S]*\}/);
+			const jsonMatch = textContent.match(/\{[\s\S]*\}/);
 			if (jsonMatch) {
 				result = JSON.parse(jsonMatch[0]) as Fortune;
 			} else {
