@@ -9,7 +9,9 @@ import {
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 
-// シンプルなインメモリキャッシュ（実際のプロダクションではRedisなどを使用するべき）
+// シンプルなインメモリキャッシュ
+// 注意: Edgeランタイムでは各リクエストごとに新しいインスタンスが作成されるため
+// キャッシュの効果は限定的。本番環境では外部キャッシュサービスの利用を検討すべき
 const cache: OmikujiCache = new Map();
 
 // キャッシュの有効期限（24時間 = 86400000ミリ秒）
@@ -134,6 +136,7 @@ export async function POST(request: Request) {
 		// Anthropicクライアントの初期化
 		const anthropic = new Anthropic({
 			apiKey,
+			fetch: fetch, // Edgeランタイム用に明示的にfetchを指定
 		});
 
 		// おみくじプロンプトの作成
@@ -154,7 +157,12 @@ export async function POST(request: Request) {
     `;
 
 		// Anthropic APIの呼び出し
-		const response = await anthropic.messages.create({
+		// タイムアウト設定を追加
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒のタイムアウト
+		
+		try {
+			const response = await anthropic.messages.create({
 			model: model,
 			max_tokens: 1000,
 			temperature: 0.7,
@@ -199,10 +207,17 @@ export async function POST(request: Request) {
 		});
 
 		return NextResponse.json(result);
+		} finally {
+			clearTimeout(timeoutId);
+		}
 	} catch (error) {
 		console.error("おみくじAPIエラー:", error);
 		return NextResponse.json(
-			{ error: "おみくじを引く際にエラーが発生しました" },
+			{ 
+				error: "おみくじを引く際にエラーが発生しました",
+				details: error instanceof Error ? error.message : String(error),
+				stack: error instanceof Error ? error.stack : undefined
+			},
 			{ status: 500 },
 		);
 	}
