@@ -8,4 +8,5 @@ interface CloudflareEnv {
 	// Anthropicの環境変数
 	ANTHROPIC_API_KEY: string;
 	ANTHROPIC_MODEL: string;
+	NODE_VERSION: string;
 }
