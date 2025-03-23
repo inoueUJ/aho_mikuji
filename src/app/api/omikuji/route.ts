@@ -98,7 +98,6 @@ function cleanupCache(): void {
 export async function POST(request: Request) {
 	try {
 		// リクエストボディから質問を取得
-		// リクエストボディから質問を取得
 		const { question } = (await request.json()) as { question: string };
 		if (!question || question.trim() === "") {
 			return NextResponse.json(
@@ -162,58 +161,61 @@ export async function POST(request: Request) {
 		const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒のタイムアウト
 		
 		try {
+			// 正しい形式でAbortControllerのsignalを渡す
 			const response = await anthropic.messages.create({
-			model: model,
-			max_tokens: 1000,
-			temperature: 0.7,
-			messages: [{ role: "user", content: prompt }],
-			system:
-				"あなたは伝統的な日本のおみくじです。回答はJSON形式で提供し、運勢（大吉、中吉、小吉、末吉、凶）と、簡潔で変なクスッと笑える回答と、神社風の短い言葉を含めてください。",
-		});
+				model: model,
+				max_tokens: 1000,
+				temperature: 0.7,
+				messages: [{ role: "user", content: prompt }],
+				system:
+					"あなたは伝統的な日本のおみくじです。回答はJSON形式で提供し、運勢（大吉、中吉、小吉、末吉、凶）と、簡潔で変なクスッと笑える回答と、神社風の短い言葉を含めてください。",
+			}, {
+				signal: controller.signal // AbortControllerのシグナルを渡す
+			});
 
-		// レスポンスからJSONデータを抽出
-		let result: Fortune;
+			// レスポンスからJSONデータを抽出
+			let result: Fortune;
 
-		try {
-			// 新しいSDKでのレスポンス構造に合わせて処理
-			let textContent = '';
-			for (const block of response.content) {
-				if (block.type === 'text') {
-					textContent += block.text;
+			try {
+				// 新しいSDKでのレスポンス構造に合わせて処理
+				let textContent = '';
+				for (const block of response.content) {
+					if (block.type === 'text') {
+						textContent += block.text;
+					}
 				}
+				
+				// JSON部分を抽出（余分なテキストがある場合に備えて）
+				const jsonMatch = textContent.match(/\{[\s\S]*\}/);
+				if (jsonMatch) {
+					result = JSON.parse(jsonMatch[0]) as Fortune;
+				} else {
+					throw new Error("JSONデータが見つかりませんでした");
+				}
+			} catch (error) {
+				console.error("JSONパースエラー:", error);
+				return NextResponse.json(
+					{ error: "おみくじの結果を解析できませんでした" },
+					{ status: 500 },
+				);
 			}
-			
-			// JSON部分を抽出（余分なテキストがある場合に備えて）
-			const jsonMatch = textContent.match(/\{[\s\S]*\}/);
-			if (jsonMatch) {
-				result = JSON.parse(jsonMatch[0]) as Fortune;
+
+			// 運勢レベルに対応する色を設定
+			const fortuneLevel = fortuneLevels.find((f) => f.level === result.level);
+			if (fortuneLevel) {
+				result.color = fortuneLevel.color;
 			} else {
-				throw new Error("JSONデータが見つかりませんでした");
+				// デフォルトの色（大吉の色）
+				result.color = "#E53E3E";
 			}
-		} catch (error) {
-			console.error("JSONパースエラー:", error);
-			return NextResponse.json(
-				{ error: "おみくじの結果を解析できませんでした" },
-				{ status: 500 },
-			);
-		}
 
-		// 運勢レベルに対応する色を設定
-		const fortuneLevel = fortuneLevels.find((f) => f.level === result.level);
-		if (fortuneLevel) {
-			result.color = fortuneLevel.color;
-		} else {
-			// デフォルトの色（大吉の色）
-			result.color = "#E53E3E";
-		}
+			// キャッシュに結果を保存
+			cache.set(cacheKey, {
+				timestamp: Date.now(),
+				data: result,
+			});
 
-		// キャッシュに結果を保存
-		cache.set(cacheKey, {
-			timestamp: Date.now(),
-			data: result,
-		});
-
-		return NextResponse.json(result);
+			return NextResponse.json(result);
 		} finally {
 			clearTimeout(timeoutId);
 		}
