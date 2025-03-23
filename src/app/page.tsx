@@ -40,14 +40,15 @@ export default function Home() {
 					});
 
 					if (!response.ok) {
-						const errorData = await response.json();
+						const errorData = (await response.json()) as { error: string };
+
 						console.error("おみくじAPIエラー:", errorData);
 						throw new Error(
 							errorData.error || "おみくじを引く際にエラーが発生しました",
 						);
 					}
 
-					const fortune = await response.json();
+					const fortune = (await response.json()) as Fortune;
 
 					// 短い遅延の後に結果を表示（アニメーション効果のため）
 					setTimeout(() => {

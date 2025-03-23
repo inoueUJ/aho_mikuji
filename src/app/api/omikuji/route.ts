@@ -94,8 +94,8 @@ function cleanupCache(): void {
 export async function POST(request: Request) {
 	try {
 		// リクエストボディから質問を取得
-		const { question } = await request.json();
-
+		// リクエストボディから質問を取得
+		const { question } = (await request.json()) as { question: string };
 		if (!question || question.trim() === "") {
 			return NextResponse.json(
 				{ error: "質問を入力してください" },
